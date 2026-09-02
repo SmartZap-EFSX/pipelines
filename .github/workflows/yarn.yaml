@@ -14,6 +14,11 @@ on:
           before any of this project's own code runs. Set this to `true` for projects that
           genuinely need them -- native module builds, `prisma generate`, Playwright browser
           downloads, `husky` -- and the scripts run through `rebuild` afterwards instead.
+      changelog_check:
+        type: 'boolean'
+        required: false
+        default: true
+        description: 'Whether to require a changelog entry on pull requests.'
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false
@@ -117,9 +122,10 @@ jobs:
     name: 'code-check > quality:basic-checks'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/10-code-check/basic-checks@main'
+      - uses: '$/github/global/stages/10-code-check/basic-checks'
         with:
           target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+          changelog_check: '${{ inputs.changelog_check }}'
     if: "github.event_name == 'pull_request'"
 
   code_check-style_eslint:
@@ -173,7 +179,7 @@ jobs:
     name: 'code-check > style:format'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/format@main'
+      - uses: '$/github/javascript/stages/10-code-check/format'
         with:
           package_manager: 'yarn'
           node_version: '${{ inputs.node_version }}'
@@ -185,9 +191,10 @@ jobs:
     name: 'code-check > quality:knip'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/javascript/stages/10-code-check/knip@main'
+      - uses: '$/github/javascript/stages/10-code-check/knip'
         with:
           package_manager: 'yarn'
+          node_version: '${{ inputs.node_version }}'
           install_run_scripts: '${{ inputs.install_run_scripts }}'
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -198,7 +205,7 @@ jobs:
     name: 'security > sast:codeql'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/codeql@main'
+      - uses: '$/github/global/stages/20-security/codeql'
         with:
           codeql_language: 'javascript-typescript'
           upload: '${{ inputs.codeql_upload }}'
@@ -221,7 +228,7 @@ jobs:
     name: 'security > sast:gitleaks'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/gitleaks@main'
+      - uses: '$/github/global/stages/20-security/gitleaks'
     needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     if: "!startsWith(github.ref, 'refs/tags/')"
 
@@ -229,7 +236,7 @@ jobs:
     name: 'security > sast:hadolint'
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     steps:
-      - uses: 'rios0rios0/pipelines/github/global/stages/20-security/hadolint@main'
+      - uses: '$/github/global/stages/20-security/hadolint'
     needs: [ 'code_check-style_eslint', 'code_check-style_format', 'code_check-quality_knip' ]
     continue-on-error: true
     if: "!startsWith(github.ref, 'refs/tags/')"
@@ -403,7 +410,7 @@ jobs:
         continue-on-error: true
 
       - name: 'Checkout scripts'
-        uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+        uses: '$/github/global/abstracts/scripts-repo'
 
       - name: 'Run SonarQube'
         run: '${{ env.SCRIPTS_DIR }}/global/scripts/tools/sonarqube/run.sh'

@@ -2,6 +2,10 @@ inputs:
   target_branch:
     description: 'The target branch to check against (e.g., main, master)'
     required: true
+  changelog_check:
+    description: 'Whether to require a changelog entry'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -49,6 +53,7 @@ runs:
         fi
 
     - name: 'Check changelog entries'
+      if: inputs.changelog_check == 'true'
       shell: 'bash'
       # Pass context values through env to avoid script injection: an actor
       # controls their PR branch name, so interpolating github.head_ref straight

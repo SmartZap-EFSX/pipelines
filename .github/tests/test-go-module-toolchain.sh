@@ -71,6 +71,22 @@ assert_true() {
   fi
 }
 
+go_workflow_forwards_codeql_toolchain() {
+  python3 - "$SCRIPTS_DIR/.github/workflows/go.yaml" <<'PY'
+import sys
+import yaml
+
+document = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+steps = document["jobs"]["security-sast_codeql"]["steps"]
+matches = [
+    step for step in steps
+    if step.get("uses") == "$/github/global/stages/20-security/codeql"
+]
+assert len(matches) == 1
+assert matches[0].get("with", {}).get("go_version_file") == "${{ inputs.go_version_file }}"
+PY
+}
+
 # version_le <a> <b> -- true when a <= b, comparing Go versions field by field.
 #
 # `sort -V` is deliberately not used: it is a GNU extension that BusyBox `sort`
@@ -238,7 +254,7 @@ done
 # The chain has to be unbroken end to end: `go-render` -> `go-docker` -> `go.yaml` -> action.
 # Any one link declaring the input without forwarding it looks fine in isolation.
 assert_true "go.yaml hands the input to the CodeQL action, not just to itself" \
-  "grep -A 4 \"20-security/codeql@main\" '$SCRIPTS_DIR/.github/workflows/go.yaml' | grep -q 'go_version_file:'"
+  "go_workflow_forwards_codeql_toolchain"
 
 # And when nobody sets it, the action must still find a module that is not at the root --
 # otherwise the default silently reproduces the original failure for those repositories.
