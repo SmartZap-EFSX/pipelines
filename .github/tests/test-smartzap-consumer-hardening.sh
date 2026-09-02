@@ -44,36 +44,65 @@ no_mutable_references() {
     github/javascript/stages/10-code-check/format/action.yaml
     github/javascript/stages/10-code-check/knip/action.yaml
   )
-  local found=()
-  local file
-  for file in "${files[@]}"; do
-    [[ -f "$ROOT/$file" ]] || { echo "missing manifest file: $file" >&2; return 1; }
-    while IFS= read -r line; do
-      found+=("$file:$line")
-    done < <(grep -nE "rios0rios0/pipelines/[^'\"[:space:]]+@main([[:space:]]|['\"]|$)" "$ROOT/$file" || true)
-  done
-  ((${#found[@]} == 0)) || { printf '%s\n' "${found[@]}" >&2; return 1; }
+  python3 - "$ROOT" "${files[@]}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+manifest = set(sys.argv[2:])
+uses = re.compile(r"^\s*-?\s*uses:\s*['\"]?([^'\"\s]+)")
+failures = []
+
+for relative in manifest:
+    path = root / relative
+    if not path.is_file():
+        failures.append(f"missing manifest file: {relative}")
+        continue
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        match = uses.match(line)
+        if not match:
+            continue
+        reference = match.group(1)
+        if not reference.startswith("rios0rios0/pipelines/"):
+            continue
+        target, _, revision = reference.partition("@")
+        target = target.removeprefix("rios0rios0/pipelines/")
+        if revision == "main":
+            failures.append(f"{relative}:{line_number}: mutable @main reference")
+        # Every repository-owned edge must point at an audited manifest entry.
+        # This keeps the explicit manifest authoritative while making a newly
+        # nested composite impossible to add without extending the audit.
+        candidate = target if target.endswith((".yaml", ".yml")) else f"{target}/action.yaml"
+        if candidate not in manifest:
+            failures.append(f"{relative}:{line_number}: reachable file absent from manifest: {candidate}")
+
+if failures:
+    print("\n".join(failures), file=sys.stderr)
+    raise SystemExit(1)
+PY
 }
 
 workflow_contracts() {
   python3 - "$ROOT/.github/workflows/go.yaml" "$ROOT/.github/workflows/yarn.yaml" "$ROOT/github/global/stages/10-code-check/basic-checks/action.yaml" <<'PY'
-import re
 import sys
+import yaml
 
-go, yarn, basic = (open(path, encoding="utf-8").read() for path in sys.argv[1:])
+go, yarn, basic = (yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:])
 
-def workflow_has_input(text, name):
-    # Inputs must be declared below workflow_call.inputs, not merely mentioned
-    # in a job expression or a comment.
-    match = re.search(r"(?ms)^    inputs:\n(.*?)(?=^    secrets:|^jobs:)", text)
-    return bool(match and re.search(rf"(?m)^      {re.escape(name)}:\s*$", match.group(1)))
+def workflow_inputs(document):
+    # PyYAML's YAML 1.1 loader resolves the `on` key to True.
+    trigger = document.get(True, document.get("on", {}))
+    return trigger.get("workflow_call", {}).get("inputs", {})
 
-def basic_forwards(text, name):
-    step = re.search(r"(?ms)^      - uses: ['\"]?[^\n]*basic-checks[^\n]*\n(.*?)(?=^      - |^    [A-Za-z0-9_-]+:|\Z)", text)
-    return bool(step and re.search(rf"(?m)^          {re.escape(name)}:\s*['\"]?\$\{{\{{\s*inputs\.{re.escape(name)}\s*\}}\}}", step.group(1)))
+def basic_forwards(document, name):
+    for step in document["jobs"]["code_check-basic_checks"]["steps"]:
+        if "basic-checks" in step.get("uses", ""):
+            return step.get("with", {}).get(name) == f"${{{{ inputs.{name} }}}}"
+    return False
 
-assert workflow_has_input(go, "changelog_check"), "go.yaml does not declare changelog_check"
-assert workflow_has_input(yarn, "changelog_check"), "yarn.yaml does not declare changelog_check"
+assert "changelog_check" in workflow_inputs(go), "go.yaml does not declare changelog_check"
+assert "changelog_check" in workflow_inputs(yarn), "yarn.yaml does not declare changelog_check"
 assert basic_forwards(go, "changelog_check"), "go.yaml does not forward changelog_check to basic-checks"
 assert basic_forwards(yarn, "changelog_check"), "yarn.yaml does not forward changelog_check to basic-checks"
 PY
@@ -81,17 +110,16 @@ PY
 
 knip_contracts() {
   python3 - "$ROOT/.github/workflows/yarn.yaml" "$ROOT/github/javascript/stages/10-code-check/knip/action.yaml" <<'PY'
-import re
 import sys
+import yaml
 
-yarn, knip = (open(path, encoding="utf-8").read() for path in sys.argv[1:])
+yarn, knip = (yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:])
 
-inputs = re.search(r"(?ms)^inputs:\n(.*?)(?=^runs:)", knip)
-assert inputs and re.search(r"(?m)^  node_version:\s*$", inputs.group(1)), "knip does not declare node_version"
-setup = re.search(r"(?ms)- name: ['\"]?Setup Node\.js.*?(?=^    - |\Z)", knip)
-assert setup and re.search(r"(?m)^        node-version:\s*['\"]?\$\{\{\s*inputs\.node_version\s*\}\}", setup.group(0)), "knip setup-node does not use inputs.node_version"
-call = re.search(r"(?ms)^      - uses: ['\"]?[^\n]*/javascript/stages/10-code-check/knip[^\n]*\n(.*?)(?=^      - |^    [A-Za-z0-9_-]+:|\Z)", yarn)
-assert call and re.search(r"(?m)^          node_version:\s*['\"]?\$\{\{\s*inputs\.node_version\s*\}\}", call.group(1)), "yarn does not forward node_version to knip"
+assert "node_version" in knip.get("inputs", {}), "knip does not declare node_version"
+setup = next((step for step in knip["runs"]["steps"] if step.get("uses", "").startswith("actions/setup-node@")), None)
+assert setup and setup.get("with", {}).get("node-version") == "${{ inputs.node_version }}", "knip setup-node does not use inputs.node_version"
+call = next((step for step in yarn["jobs"]["code_check-quality_knip"]["steps"] if "/javascript/stages/10-code-check/knip@" in step.get("uses", "")), None)
+assert call and call.get("with", {}).get("node_version") == "${{ inputs.node_version }}", "yarn does not forward node_version to knip"
 PY
 }
 
