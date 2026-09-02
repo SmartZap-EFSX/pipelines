@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'made reusable GitHub workflows safe for immutable consumer execution while retaining their current defaults: `go.yaml` and `yarn.yaml` now expose a `changelog_check` switch that continues to require changelog entries unless a consumer explicitly disables it, and Yarn forwards its configured `node_version` to Knip instead of silently running that job on Node 20. A repository can therefore pin the reusable workflow at one revision, opt out of the initial changelog gate during adoption, and run every JavaScript check on the same Node release it selected.'
+time: '2026-09-02T01:00:00Z'

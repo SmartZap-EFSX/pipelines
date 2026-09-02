@@ -113,7 +113,7 @@ for workflow in yarn npm; do
   assert_true "GitHub Actions: ${workflow}.yaml declares 'code-check > style:format'" \
     "grep -q \"name: 'code-check > style:format'\" '$wf'"
   assert_true "GitHub Actions: ${workflow}.yaml points at the format action" \
-    "grep -q 'javascript/stages/10-code-check/format@main' '$wf'"
+    "grep -q 'javascript/stages/10-code-check/format' '$wf'"
 done
 
 GL_TEMPLATE="$SCRIPTS_DIR/gitlab/javascript/stages/10-code-check/yarn.yaml"

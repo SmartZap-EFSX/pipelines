@@ -9,6 +9,10 @@ inputs:
     required: false
     default: 'npm'
     description: 'Package manager to use (npm or yarn)'
+  node_version:
+    required: false
+    default: '20'
+    description: 'Node.js version handed to actions/setup-node.'
 
 runs:
   using: 'composite'
@@ -59,7 +63,7 @@ runs:
     - name: 'Setup Node.js'
       uses: 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' # v6.5.0
       with:
-        node-version: '20'
+        node-version: '${{ inputs.node_version }}'
         cache: '${{ inputs.package_manager }}'
 
     # Installed WITHOUT lifecycle scripts. `npm ci` / `yarn install` otherwise run

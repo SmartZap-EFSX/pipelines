@@ -238,7 +238,7 @@ done
 # The chain has to be unbroken end to end: `go-render` -> `go-docker` -> `go.yaml` -> action.
 # Any one link declaring the input without forwarding it looks fine in isolation.
 assert_true "go.yaml hands the input to the CodeQL action, not just to itself" \
-  "grep -A 4 \"20-security/codeql@main\" '$SCRIPTS_DIR/.github/workflows/go.yaml' | grep -q 'go_version_file:'"
+  "grep -A 4 \"20-security/codeql\" '$SCRIPTS_DIR/.github/workflows/go.yaml' | grep -q 'go_version_file:'"
 
 # And when nobody sets it, the action must still find a module that is not at the root --
 # otherwise the default silently reproduces the original failure for those repositories.

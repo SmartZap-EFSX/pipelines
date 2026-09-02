@@ -8,6 +8,11 @@ on:
         required: false
         default: false
         description: 'Enable cross-compilation check for 6 OS/arch targets (runs in parallel via matrix)'
+      changelog_check:
+        type: 'boolean'
+        required: false
+        default: true
+        description: 'Whether to require a changelog entry on pull requests.'
       sonar_host:
         description: 'SonarQube/SonarCloud host URL (leave empty to skip SonarQube)'
         required: false
@@ -111,6 +116,7 @@ jobs:
       - uses: '$/github/global/stages/10-code-check/basic-checks'
         with:
           target_branch: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch || 'main' }}
+          changelog_check: '${{ inputs.changelog_check }}'
     if: "github.event_name == 'pull_request'"
 
   code_check-style_golangci_lint:
