@@ -54,9 +54,6 @@ manifest = set(sys.argv[2:])
 uses = re.compile(r"^\s*-?\s*uses:\s*['\"]?([^'\"\s]+)")
 
 def resolve_reference(reference):
-    if reference.startswith("rios0rios0/pipelines/"):
-        target, _, revision = reference.partition("@")
-        return target.removeprefix("rios0rios0/pipelines/"), revision
     if reference.startswith("$/"):
         return reference.removeprefix("$/"), ""
     return None
@@ -72,12 +69,17 @@ def validate_closure(base, audited):
             match = uses.match(line)
             if not match:
                 continue
-            resolved = resolve_reference(match.group(1))
+            reference = match.group(1)
+            if reference.startswith(("rios0rios0/pipelines/", "./")):
+                failures.append(
+                    f"{relative}:{line_number}: repository-owned action must use exact "
+                    f"same-revision $/ reference (found {reference})"
+                )
+                continue
+            resolved = resolve_reference(reference)
             if resolved is None:
                 continue
             target, revision = resolved
-            if revision == "main":
-                failures.append(f"{relative}:{line_number}: mutable @main reference")
             # Every repository-owned edge must point at an audited manifest entry.
             # This keeps the explicit manifest authoritative while making a newly
             # nested composite impossible to add without extending the audit.
@@ -86,9 +88,9 @@ def validate_closure(base, audited):
                 failures.append(f"{relative}:{line_number}: reachable file absent from manifest: {candidate}")
     return failures
 
-# Self-test the exact production validator against a fixture: this is the form
-# Task 2 uses for same-revision references, and an unmanifested nested action
-# must be rejected by the same closure logic used below.
+# Self-test the exact production validator against fixtures. The only accepted
+# repository-owned form is `$/...`; every remote selector and local `./...`
+# action bypasses the running workflow's same-revision resolution.
 import tempfile
 with tempfile.TemporaryDirectory() as directory:
     fixture = Path(directory)
@@ -96,6 +98,17 @@ with tempfile.TemporaryDirectory() as directory:
     (fixture / "root/action.yaml").write_text("- uses: '$/github/new/action'\n", encoding="utf-8")
     fixture_failures = validate_closure(fixture, {"root/action.yaml"})
     assert any("reachable file absent from manifest: github/new/action/action.yaml" in failure for failure in fixture_failures), fixture_failures
+    for reference in (
+        "rios0rios0/pipelines/github/new/action@main",
+        "rios0rios0/pipelines/github/new/action@v1",
+        "rios0rios0/pipelines/github/new/action@feature",
+        "rios0rios0/pipelines/github/new/action@0123456789abcdef0123456789abcdef01234567",
+        "rios0rios0/pipelines/github/new/action",
+        "./github/new/action",
+    ):
+        (fixture / "root/action.yaml").write_text(f"- uses: '{reference}'\n", encoding="utf-8")
+        fixture_failures = validate_closure(fixture, {"root/action.yaml"})
+        assert any("must use exact same-revision $/ reference" in failure for failure in fixture_failures), (reference, fixture_failures)
 
 failures = validate_closure(root, manifest)
 
@@ -125,6 +138,9 @@ def basic_forwards(document, name):
 
 assert "changelog_check" in workflow_inputs(go), "go.yaml does not declare changelog_check"
 assert "changelog_check" in workflow_inputs(yarn), "yarn.yaml does not declare changelog_check"
+assert workflow_inputs(go)["changelog_check"].get("default") is True, "go.yaml changelog_check does not default to true"
+assert workflow_inputs(yarn)["changelog_check"].get("default") is True, "yarn.yaml changelog_check does not default to true"
+assert basic["inputs"].get("changelog_check", {}).get("default") == "true", "basic-checks changelog_check does not default to 'true'"
 assert basic_forwards(go, "changelog_check"), "go.yaml does not forward changelog_check to basic-checks"
 assert basic_forwards(yarn, "changelog_check"), "yarn.yaml does not forward changelog_check to basic-checks"
 PY
@@ -138,6 +154,7 @@ import yaml
 yarn, knip = (yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:])
 
 assert "node_version" in knip.get("inputs", {}), "knip does not declare node_version"
+assert knip["inputs"]["node_version"].get("default") == "20", "knip node_version does not default to '20'"
 setup = next((step for step in knip["runs"]["steps"] if step.get("uses", "").startswith("actions/setup-node@")), None)
 assert setup and setup.get("with", {}).get("node-version") == "${{ inputs.node_version }}", "knip setup-node does not use inputs.node_version"
 call = next((step for step in yarn["jobs"]["code_check-quality_knip"]["steps"] if step.get("uses") == "$/github/javascript/stages/10-code-check/knip"), None)

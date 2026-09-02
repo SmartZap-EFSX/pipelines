@@ -13,7 +13,9 @@
 ## Global Constraints
 
 - Consumer workflows will pin the final fork commit by its full 40-character SHA.
-- The Go/Yarn reachable graphs must contain no `rios0rios0/pipelines/...@main` references.
+- The Go/Yarn reachable graphs may use repository-owned actions only through
+  exact same-revision `$/...` references; remote `rios0rios0/pipelines/...`
+  selectors and local `./...` paths are rejected.
 - Existing behavior remains the default for consumers that omit new inputs.
 - SmartZap's runner remains socketless; this change does not introduce Docker requirements.
 
@@ -29,7 +31,7 @@
 - Consumes: `.github/workflows/go.yaml`, `.github/workflows/yarn.yaml`, and the composite actions they reference.
 - Produces: `make test-smartzap-consumer-hardening`, a regression gate for same-revision references and input forwarding.
 
-- [ ] **Step 1: Write tests that assert no mutable `rios0rios0/pipelines@main` remains in the Go/Yarn reachable files.**
+- [ ] **Step 1: Write tests that require exact same-revision `$/...` for every repository-owned Go/Yarn action edge and reject remote or local alternatives.**
 - [ ] **Step 2: Assert `changelog_check` is declared by both workflows and forwarded to basic-checks.**
 - [ ] **Step 3: Assert Knip declares `node_version`, uses it in setup-node, and Yarn forwards its workflow value.**
 - [ ] **Step 4: Add the focused target to `Makefile` and run it.**

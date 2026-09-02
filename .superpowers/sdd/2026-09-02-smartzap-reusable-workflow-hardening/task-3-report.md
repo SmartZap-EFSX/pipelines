@@ -45,6 +45,18 @@ its exact `$/...` action plus the `go_version_file` forwarding. The JavaScript
 format contract preserves npm's unchanged explicit `@main` expectation rather
 than weakening it while updating Yarn's local-reference expectation.
 
+## CodeRabbit autofix round
+
+The same-revision policy now permits only `$/...` for repository-owned Go/Yarn
+edges. The hardening, supply-chain, and workflow-composition contracts reject
+remote tag, branch, SHA, and unqualified selectors as well as local `./...`
+paths; fixtures prove each rejected shape. The hardening contract also asserts
+the backward-compatible defaults: workflow `changelog_check: true`, composite
+`changelog_check: 'true'`, and Knip `node_version: '20'`.
+
+The plan now states this exact policy rather than describing only `@main` as
+disallowed.
+
 ## Concern
 
 The `$/...` action-reference syntax requires the Task 4 GitHub runtime canary;

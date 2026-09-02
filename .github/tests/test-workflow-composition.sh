@@ -107,6 +107,18 @@ assert_empty() {
   fi
 }
 
+assert_true() {
+  local description="$1"
+  local condition="$2"
+  if eval "$condition"; then
+    echo -e "${GREEN}  PASS: $description${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${RED}  FAIL: $description${NC}"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+  fi
+}
+
 is_standalone() {
   local candidate="$1"
   case " $STANDALONE " in
@@ -306,6 +318,34 @@ assert_empty "every deployment job declares needs:, environment: and if:, under 
 echo ""
 
 echo "Test 7: internal references declare their revision policy"
+is_go_yarn_repository_owned_action_ref() {
+  case "$1" in
+    rios0rios0/pipelines/*|./*|\$/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_go_yarn_same_revision_ref() {
+  [[ "$1" == '$/'* ]]
+}
+
+go_yarn_revision_policy_rejects_fixtures() {
+  local reference
+  for reference in \
+    'rios0rios0/pipelines/github/new/action@v1' \
+    'rios0rios0/pipelines/github/new/action@feature' \
+    'rios0rios0/pipelines/github/new/action@0123456789abcdef0123456789abcdef01234567' \
+    'rios0rios0/pipelines/github/new/action' \
+    './github/new/action'; do
+    is_go_yarn_repository_owned_action_ref "$reference" \
+      && ! is_go_yarn_same_revision_ref "$reference" \
+      || return 1
+  done
+}
+
+assert_true "Go/Yarn same-revision policy rejects remote and local action fixtures" \
+  "go_yarn_revision_policy_rejects_fixtures"
+
 INTERNAL_REFERENCE_FINDINGS="$(
   awk -F'\t' \
     '$1 == "uses" && index($4, "rios0rios0/pipelines/") == 1 && $4 !~ /@main$/ { print $2 ": unexpected internal ref " $4 }' \
@@ -313,11 +353,9 @@ INTERNAL_REFERENCE_FINDINGS="$(
 )"
 for workflow in go.yaml yarn.yaml; do
   while IFS=$'\t' read -r _ _ job reference; do
-    case "$reference" in
-      rios0rios0/pipelines/*)
-        INTERNAL_REFERENCE_FINDINGS="${INTERNAL_REFERENCE_FINDINGS}${INTERNAL_REFERENCE_FINDINGS:+$'\n'}${workflow}: job ${job} must use exact-running-commit $/ semantics (found '${reference}')"
-        ;;
-    esac
+    if is_go_yarn_repository_owned_action_ref "$reference" && ! is_go_yarn_same_revision_ref "$reference"; then
+      INTERNAL_REFERENCE_FINDINGS="${INTERNAL_REFERENCE_FINDINGS}${INTERNAL_REFERENCE_FINDINGS:+$'\n'}${workflow}: job ${job} must use exact-running-commit $/ semantics (found '${reference}')"
+    fi
   done < <(awk -F'\t' -v workflow="$workflow" '$1 == "uses" && $2 == workflow { print }' "$FACTS")
 done
 assert_empty "internal refs use explicit @main, except Go/Yarn action graphs use exact-running-commit $/ semantics" \

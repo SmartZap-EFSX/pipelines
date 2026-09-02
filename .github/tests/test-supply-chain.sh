@@ -429,22 +429,41 @@ same_revision_action_roots() {
 import sys
 import yaml
 
-failed = False
-for filename in sys.argv[1:]:
-    document = yaml.safe_load(open(filename, encoding="utf-8"))
+def validate_document(filename, document):
+    failures = []
     found = False
     for job, body in (document.get("jobs") or {}).items():
         for step in (body or {}).get("steps") or []:
             reference = str((step or {}).get("uses", ""))
-            if reference.startswith(("rios0rios0/pipelines/", "$/")):
+            if reference.startswith(("rios0rios0/pipelines/", "./", "$/")):
                 found = True
                 if not reference.startswith("$/"):
-                    print(f"{filename}: job {job} has mutable repository-owned ref {reference}")
-                    failed = True
+                    failures.append(
+                        f"{filename}: job {job} must use exact same-revision $/ "
+                        f"repository-owned ref (found {reference})"
+                    )
     if not found:
-        print(f"{filename}: no repository-owned action references were checked")
-        failed = True
-raise SystemExit(failed)
+        failures.append(f"{filename}: no repository-owned action references were checked")
+    return failures
+
+failures = []
+for filename in sys.argv[1:]:
+    failures.extend(validate_document(filename, yaml.safe_load(open(filename, encoding="utf-8"))))
+
+for reference in (
+    "rios0rios0/pipelines/github/new/action@v1",
+    "rios0rios0/pipelines/github/new/action@feature",
+    "rios0rios0/pipelines/github/new/action@0123456789abcdef0123456789abcdef01234567",
+    "rios0rios0/pipelines/github/new/action",
+    "./github/new/action",
+):
+    fixture = {"jobs": {"check": {"steps": [{"uses": reference}]}}}
+    fixture_failures = validate_document("fixture.yaml", fixture)
+    assert any("must use exact same-revision $/" in failure for failure in fixture_failures), (reference, fixture_failures)
+
+if failures:
+    print("\n".join(failures))
+raise SystemExit(bool(failures))
 PY
 }
 
