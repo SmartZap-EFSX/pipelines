@@ -87,7 +87,7 @@ runs:
       env:
         INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
-    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+    - uses: '$/github/global/abstracts/scripts-repo'
 
     - name: 'Run the Prettier check'
       run: $SCRIPTS_DIR/global/scripts/languages/javascript/format/run.sh

@@ -311,11 +311,16 @@ INTERNAL_REFERENCE_FINDINGS="$(
     '$1 == "uses" && index($4, "rios0rios0/pipelines/") == 1 && $4 !~ /@main$/ { print $2 ": unexpected internal ref " $4 }' \
     "$FACTS"
 )"
-YARN_SEMGREP_REF="$(fact_value 'uses' 'yarn.yaml' 'security-sast_semgrep')"
-if [[ "$YARN_SEMGREP_REF" != '$/github/global/stages/20-security/semgrep' ]]; then
-  INTERNAL_REFERENCE_FINDINGS="${INTERNAL_REFERENCE_FINDINGS}${INTERNAL_REFERENCE_FINDINGS:+$'\n'}yarn.yaml: Semgrep must resolve at the reusable workflow's exact commit (found '${YARN_SEMGREP_REF:-none}')"
-fi
-assert_empty "internal refs use explicit @main or exact-running-commit $/ semantics" \
+for workflow in go.yaml yarn.yaml; do
+  while IFS=$'\t' read -r _ _ job reference; do
+    case "$reference" in
+      rios0rios0/pipelines/*)
+        INTERNAL_REFERENCE_FINDINGS="${INTERNAL_REFERENCE_FINDINGS}${INTERNAL_REFERENCE_FINDINGS:+$'\n'}${workflow}: job ${job} must use exact-running-commit $/ semantics (found '${reference}')"
+        ;;
+    esac
+  done < <(awk -F'\t' -v workflow="$workflow" '$1 == "uses" && $2 == workflow { print }' "$FACTS")
+done
+assert_empty "internal refs use explicit @main, except Go/Yarn action graphs use exact-running-commit $/ semantics" \
   "$INTERNAL_REFERENCE_FINDINGS"
 echo ""
 

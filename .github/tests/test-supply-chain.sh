@@ -419,10 +419,38 @@ for abstract in \
     "! grep -qE 'git clone( --depth 1)? \"?\\\$?\{?(SCRIPTS_REPO|PIPELINES_REPO)|git clone --depth 1 https://github.com/rios0rios0/pipelines' '$abstract'"
 done
 
-# The Yarn Semgrep chain is the first first-party GitHub path that promises
-# end-to-end immutability from a consumer's reusable-workflow SHA. Both edges
-# must use GitHub's exact-running-commit self reference; either edge falling
-# back to `@main` makes a rerun of an unchanged consumer execute new code.
+# Go and Yarn are the first first-party GitHub action graphs that promise
+# end-to-end immutability from a consumer's reusable-workflow SHA. Every
+# repository-owned action edge at their roots must use GitHub's exact-running-
+# commit self reference; falling back to `@main` makes a rerun of an unchanged
+# consumer execute new code.
+same_revision_action_roots() {
+  python3 - "$@" <<'PY'
+import sys
+import yaml
+
+failed = False
+for filename in sys.argv[1:]:
+    document = yaml.safe_load(open(filename, encoding="utf-8"))
+    found = False
+    for job, body in (document.get("jobs") or {}).items():
+        for step in (body or {}).get("steps") or []:
+            reference = str((step or {}).get("uses", ""))
+            if reference.startswith(("rios0rios0/pipelines/", "$/")):
+                found = True
+                if not reference.startswith("$/"):
+                    print(f"{filename}: job {job} has mutable repository-owned ref {reference}")
+                    failed = True
+    if not found:
+        print(f"{filename}: no repository-owned action references were checked")
+        failed = True
+raise SystemExit(failed)
+PY
+}
+
+assert_true "Go/Yarn repository-owned action roots follow their reusable-workflow commit" \
+  "same_revision_action_roots '.github/workflows/go.yaml' '.github/workflows/yarn.yaml'"
+# Keep a direct regression assertion for the established Semgrep edge.
 assert_true "yarn.yaml: Semgrep composite follows the reusable-workflow commit" \
   "active_uses_ref '.github/workflows/yarn.yaml' '\$/github/global/stages/20-security/semgrep'"
 assert_true "semgrep/action.yaml: scripts checkout follows the composite commit" \

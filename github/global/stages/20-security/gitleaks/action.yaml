@@ -11,7 +11,7 @@ runs:
         fetch-depth: 0
 
     - name: 'Get Scripts'
-      uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+      uses: '$/github/global/abstracts/scripts-repo'
 
     - name: 'Execute'
       shell: 'bash'

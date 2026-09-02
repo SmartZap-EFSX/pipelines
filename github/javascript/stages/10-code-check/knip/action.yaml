@@ -89,7 +89,7 @@ runs:
       env:
         INSTALL_RUN_SCRIPTS: '${{ inputs.install_run_scripts }}'
 
-    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+    - uses: '$/github/global/abstracts/scripts-repo'
 
     - run: $SCRIPTS_DIR/global/scripts/languages/javascript/knip/run.sh
       shell: 'bash'

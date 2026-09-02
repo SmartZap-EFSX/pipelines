@@ -169,7 +169,7 @@ runs:
           ${{ runner.os }}-${{ runner.arch }}-go-${{ steps.setup-go.outputs.go-version }}-test-tools-
           ${{ runner.os }}-${{ runner.arch }}-go-test-tools-
 
-    - uses: 'rios0rios0/pipelines/github/global/abstracts/scripts-repo@main'
+    - uses: '$/github/global/abstracts/scripts-repo'
 
     - run: $SCRIPTS_DIR/global/scripts/languages/golang/test/run.sh
       shell: 'bash'
