@@ -52,7 +52,6 @@ from pathlib import Path
 root = Path(sys.argv[1])
 manifest = set(sys.argv[2:])
 uses = re.compile(r"^\s*-?\s*uses:\s*['\"]?([^'\"\s]+)")
-failures = []
 
 def resolve_reference(reference):
     if reference.startswith("rios0rios0/pipelines/"):
@@ -62,34 +61,43 @@ def resolve_reference(reference):
         return reference.removeprefix("$/"), ""
     return None
 
-# Self-test the local `$` form specifically: this is the form Task 2 uses for
-# same-revision references, and an unmanifested nested action must be rejected.
-synthetic_target = resolve_reference("$/github/new/action")[0]
-synthetic_candidate = f"{synthetic_target}/action.yaml"
-assert synthetic_candidate not in {"root/action.yaml"}, "unmanifested $/ edge self-test did not fail"
+def validate_closure(base, audited):
+    failures = []
+    for relative in audited:
+        path = base / relative
+        if not path.is_file():
+            failures.append(f"missing manifest file: {relative}")
+            continue
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            match = uses.match(line)
+            if not match:
+                continue
+            resolved = resolve_reference(match.group(1))
+            if resolved is None:
+                continue
+            target, revision = resolved
+            if revision == "main":
+                failures.append(f"{relative}:{line_number}: mutable @main reference")
+            # Every repository-owned edge must point at an audited manifest entry.
+            # This keeps the explicit manifest authoritative while making a newly
+            # nested composite impossible to add without extending the audit.
+            candidate = target if target.endswith((".yaml", ".yml")) else f"{target}/action.yaml"
+            if candidate not in audited:
+                failures.append(f"{relative}:{line_number}: reachable file absent from manifest: {candidate}")
+    return failures
 
-for relative in manifest:
-    path = root / relative
-    if not path.is_file():
-        failures.append(f"missing manifest file: {relative}")
-        continue
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        match = uses.match(line)
-        if not match:
-            continue
-        reference = match.group(1)
-        resolved = resolve_reference(reference)
-        if resolved is None:
-            continue
-        target, revision = resolved
-        if revision == "main":
-            failures.append(f"{relative}:{line_number}: mutable @main reference")
-        # Every repository-owned edge must point at an audited manifest entry.
-        # This keeps the explicit manifest authoritative while making a newly
-        # nested composite impossible to add without extending the audit.
-        candidate = target if target.endswith((".yaml", ".yml")) else f"{target}/action.yaml"
-        if candidate not in manifest:
-            failures.append(f"{relative}:{line_number}: reachable file absent from manifest: {candidate}")
+# Self-test the exact production validator against a fixture: this is the form
+# Task 2 uses for same-revision references, and an unmanifested nested action
+# must be rejected by the same closure logic used below.
+import tempfile
+with tempfile.TemporaryDirectory() as directory:
+    fixture = Path(directory)
+    (fixture / "root").mkdir()
+    (fixture / "root/action.yaml").write_text("- uses: '$/github/new/action'\n", encoding="utf-8")
+    fixture_failures = validate_closure(fixture, {"root/action.yaml"})
+    assert any("reachable file absent from manifest: github/new/action/action.yaml" in failure for failure in fixture_failures), fixture_failures
+
+failures = validate_closure(root, manifest)
 
 if failures:
     print("\n".join(failures), file=sys.stderr)
