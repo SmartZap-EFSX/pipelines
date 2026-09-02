@@ -54,6 +54,20 @@ manifest = set(sys.argv[2:])
 uses = re.compile(r"^\s*-?\s*uses:\s*['\"]?([^'\"\s]+)")
 failures = []
 
+def resolve_reference(reference):
+    if reference.startswith("rios0rios0/pipelines/"):
+        target, _, revision = reference.partition("@")
+        return target.removeprefix("rios0rios0/pipelines/"), revision
+    if reference.startswith("$/"):
+        return reference.removeprefix("$/"), ""
+    return None
+
+# Self-test the local `$` form specifically: this is the form Task 2 uses for
+# same-revision references, and an unmanifested nested action must be rejected.
+synthetic_target = resolve_reference("$/github/new/action")[0]
+synthetic_candidate = f"{synthetic_target}/action.yaml"
+assert synthetic_candidate not in {"root/action.yaml"}, "unmanifested $/ edge self-test did not fail"
+
 for relative in manifest:
     path = root / relative
     if not path.is_file():
@@ -64,10 +78,10 @@ for relative in manifest:
         if not match:
             continue
         reference = match.group(1)
-        if not reference.startswith("rios0rios0/pipelines/"):
+        resolved = resolve_reference(reference)
+        if resolved is None:
             continue
-        target, _, revision = reference.partition("@")
-        target = target.removeprefix("rios0rios0/pipelines/")
+        target, revision = resolved
         if revision == "main":
             failures.append(f"{relative}:{line_number}: mutable @main reference")
         # Every repository-owned edge must point at an audited manifest entry.
