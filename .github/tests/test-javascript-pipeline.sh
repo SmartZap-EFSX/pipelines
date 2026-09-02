@@ -90,6 +90,20 @@ skip() {
   TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
 }
 
+workflow_job_uses_action() {
+  local workflow="$1"
+  local expected_action="$2"
+  python3 - "$workflow" "$expected_action" <<'PY'
+import sys
+import yaml
+
+workflow, expected_action = sys.argv[1:]
+document = yaml.safe_load(open(workflow, encoding="utf-8"))
+steps = document["jobs"]["code_check-style_format"]["steps"]
+assert any(step.get("uses") == expected_action for step in steps)
+PY
+}
+
 WORK_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$WORK_DIR"; }
 trap cleanup EXIT
@@ -110,10 +124,15 @@ assert_true "GitHub Actions: the action calls the runner" \
 
 for workflow in yarn npm; do
   wf="$SCRIPTS_DIR/.github/workflows/${workflow}.yaml"
+  if [[ "$workflow" == 'yarn' ]]; then
+    expected_format_action='$/github/javascript/stages/10-code-check/format'
+  else
+    expected_format_action='rios0rios0/pipelines/github/javascript/stages/10-code-check/format@main'
+  fi
   assert_true "GitHub Actions: ${workflow}.yaml declares 'code-check > style:format'" \
     "grep -q \"name: 'code-check > style:format'\" '$wf'"
   assert_true "GitHub Actions: ${workflow}.yaml points at the format action" \
-    "grep -q 'javascript/stages/10-code-check/format' '$wf'"
+    "workflow_job_uses_action '$wf' '$expected_format_action'"
 done
 
 GL_TEMPLATE="$SCRIPTS_DIR/gitlab/javascript/stages/10-code-check/yarn.yaml"

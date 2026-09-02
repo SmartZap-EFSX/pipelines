@@ -36,6 +36,15 @@ now recognize the local immutable path:
 CodeRabbit 0.7.5 was authenticated and analyzed the uncommitted diff; it
 returned no findings payload.
 
+## Review round 1
+
+The stale-reference selectors now parse the relevant workflow job and require
+the exact action reference before inspecting its input mapping. Yarn's format
+and Knip checks require their exact `$/...` actions; Go's CodeQL check requires
+its exact `$/...` action plus the `go_version_file` forwarding. The JavaScript
+format contract preserves npm's unchanged explicit `@main` expectation rather
+than weakening it while updating Yarn's local-reference expectation.
+
 ## Concern
 
 The `$/...` action-reference syntax requires the Task 4 GitHub runtime canary;

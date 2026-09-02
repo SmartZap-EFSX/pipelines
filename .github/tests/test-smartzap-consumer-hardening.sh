@@ -140,7 +140,7 @@ yarn, knip = (yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[
 assert "node_version" in knip.get("inputs", {}), "knip does not declare node_version"
 setup = next((step for step in knip["runs"]["steps"] if step.get("uses", "").startswith("actions/setup-node@")), None)
 assert setup and setup.get("with", {}).get("node-version") == "${{ inputs.node_version }}", "knip setup-node does not use inputs.node_version"
-call = next((step for step in yarn["jobs"]["code_check-quality_knip"]["steps"] if step.get("uses", "").endswith("/javascript/stages/10-code-check/knip")), None)
+call = next((step for step in yarn["jobs"]["code_check-quality_knip"]["steps"] if step.get("uses") == "$/github/javascript/stages/10-code-check/knip"), None)
 assert call and call.get("with", {}).get("node_version") == "${{ inputs.node_version }}", "yarn does not forward node_version to knip"
 PY
 }
